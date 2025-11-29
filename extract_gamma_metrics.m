@@ -17,105 +17,43 @@
 %
 % --------------------------------------------------------------
 
-clear; clc;
+% Load the TFR data file
+clc
+load("....\timefreq_morlet_251129_1520_ersd_time.mat");
 
-%% --------------------------------------------------------------
-%  Define subject file lists
-%  (Placeholders: replace with your actual .mat file paths)
-% --------------------------------------------------------------
+high_gamma_range = [70, 90];  % High gamma frequency range
+peak_time_window = [0, 0.1]; % Time window for peak detection
 
-num_subjects = 20;   % number of subjects per group
+% Extract time vector and frequency vector from the dataset
+num_time_points = 2001; % Given time resolution from -2 to 2 sec
+num_freq_points = 100;   % Given frequency resolution from 1 to 99 Hz
 
-fullterm_subjects = { ...
-    'PATH/TO/FT_subject01.mat', ...
-    'PATH/TO/FT_subject02.mat', ...
-     .......
-};
+time = linspace(-2, 2, num_time_points); % Generate correct time vector
 
-preterm_subjects = { ...
-    'PATH/TO/PT_subject01.mat', ...
-    'PATH/TO/PT_subject02.mat', ...
-    ...........
-};
+% Find indices for the required time and frequency range
+time_indices = find(time >= peak_time_window(1) & time <= peak_time_window(2));
+freq_indices = find(Freqs >= high_gamma_range(1) & Freqs <= high_gamma_range(2));
 
-groups = {'Fullterm', 'Preterm'};
-subject_files = {fullterm_subjects, preterm_subjects};
+% Extract the contralateral TFR data (Precentral L assumed as contralateral)
+contralateral_tfr = squeeze(TF(1, :, :)); % Remove singleton dimension
+ipsilateral_tfr = squeeze(TF(2, :, :));
+% Extract relevant time-frequency data
+contra_selected_tfr = contralateral_tfr(time_indices, freq_indices)'; % Transpose for correct indexing
+ipsil_selected_tfr = ipsilateral_tfr(time_indices, freq_indices)';
+% Find peak gamma frequency and its power
+[contra_max_power, contra_max_idx] = max(contra_selected_tfr(:));
+[contra_peak_freq_idx, contra_peak_time_idx] = ind2sub(size(contra_selected_tfr), contra_max_idx);
+contra_peak_gamma_frequency = Freqs(freq_indices(contra_peak_freq_idx));
 
-%% --------------------------------------------------------------
-%  Analysis parameters
-% --------------------------------------------------------------
+[ipsi_max_power, ipsi_max_idx] = max(ipsil_selected_tfr(:));
+[ipsi_peak_freq_idx, ipsi_peak_time_idx] = ind2sub(size(ipsil_selected_tfr), ipsi_max_idx);
+ipsi_peak_gamma_frequency = Freqs(freq_indices(ipsi_peak_freq_idx));
 
-high_gamma_range = [70, 90];        % Hz
-peak_time_window = [0, 0.10];       % seconds (0–100 ms after movement onset)
 
-num_time_points = 2001;             % Brainstorm default export
-time = linspace(-2, 2, num_time_points);
 
-results = {};
+% Display results
+disp(['contra Peak Gamma Frequency (0-0.1s): ', num2str(contra_peak_gamma_frequency), ' Hz']);
+disp(['contra Peak Gamma Power: ', num2str(contra_max_power)]);
 
-%% --------------------------------------------------------------
-%  Loop over groups and subjects
-% --------------------------------------------------------------
-
-for g = 1:2
-    for s = 1:num_subjects
-        
-        file_path = subject_files{g}{s};
-
-        try
-            % Load Brainstorm TFR data
-            load(file_path);  % loads: TF, Freqs
-
-            % Time & frequency indices
-            t_idx = find(time >= peak_time_window(1) & time <= peak_time_window(2));
-            f_idx = find(Freqs >= high_gamma_range(1) & Freqs <= high_gamma_range(2));
-
-            % Source-scout order: 1 = contralateral, 2 = ipsilateral
-            % Special handling for left-handed subject (example)
-            if contains(file_path, 'Left_hand')
-                contralateral_tfr = squeeze(TF(2, :, :));
-                ipsilateral_tfr   = squeeze(TF(1, :, :));
-            else
-                contralateral_tfr = squeeze(TF(1, :, :));
-                ipsilateral_tfr   = squeeze(TF(2, :, :));
-            end
-
-            % Extract window of interest
-            contra_window = contralateral_tfr(t_idx, f_idx)';
-            ipsi_window   = ipsilateral_tfr(t_idx, f_idx)';
-
-            % Peak gamma (min = ERD)
-            [pow_contra, idx_contra] = min(contra_window(:));
-            [freq_idx_contra, ~] = ind2sub(size(contra_window), idx_contra);
-
-            [pow_ipsi, idx_ipsi] = min(ipsi_window(:));
-            [freq_idx_ipsi, ~] = ind2sub(size(ipsi_window), idx_ipsi);
-
-            peak_freq_contra = Freqs(f_idx(freq_idx_contra));
-            peak_freq_ipsi   = Freqs(f_idx(freq_idx_ipsi));
-
-            % Store results
-            results = [results; {
-                groups{g}, s, peak_freq_contra, pow_contra, peak_freq_ipsi, pow_ipsi
-            }];
-
-            fprintf('Group %s | Subject %d\n', groups{g}, s);
-            fprintf('   Contra: %0.1f Hz | Power %0.3f\n', peak_freq_contra, pow_contra);
-            fprintf('   Ipsi  : %0.1f Hz | Power %0.3f\n', peak_freq_ipsi, pow_ipsi);
-
-        catch ME
-            warning(['Error processing subject ', num2str(s), ' (', groups{g}, '): ', ME.message]);
-        end
-    end
-end
-
-%% --------------------------------------------------------------
-%  Save output table
-% --------------------------------------------------------------
-
-results_table = cell2table(results, ...
-    'VariableNames', {'Group', 'Subject', 'PeakFreq_Contra', 'Power_Contra', 'PeakFreq_Ipsi', 'Power_Ipsi'});
-
-writetable(results_table, 'gamma_results.xlsx');
-
-fprintf('\nSaved: gamma_results.xlsx\n');
+disp(['ipsi Peak Gamma Frequency (0-0.1s): ', num2str(ipsi_peak_gamma_frequency), ' Hz']);
+disp(['ipsi Peak Gamma Power: ', num2str(ipsi_max_power)]);
